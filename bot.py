@@ -1,13 +1,17 @@
+import os
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from serpapi import GoogleSearch
 import random
-from baza import zapisz_email_i_kod, potwierdz_kod, is_logged_in, init_db, wyloguj_user
+from database import *
 
-from mailer import wyslij_maila
+load_dotenv()
 
-BOT_TOKEN = '7596922139:AAH0_bPKSTV_HeAzKdk146ghQAW17RXhJvc'
-SERPAPI_KEY = '3179bee341901ba51d3263c1a9dc6d87e656c80b9f157463c38b0f7f7b7e1a80'
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+
+from mail_sender import wyslij_maila
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hejka! Jestem EduChat – jak mogę Ci pomóc? 😊")
@@ -36,11 +40,11 @@ async def zaloguj(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     kod = str(random.randint(100000, 999999))
-    zapisz_email_i_kod(user_id, email, kod)
+    save_code_and_email(user_id, email, kod)
     wyslij_maila(email, kod)
     await update.message.reply_text("📩 Wysłano kod weryfikacyjny na Twój adres e-mail. Wpisz go komendą: `/kod 123456`")
 
-async def kod(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if is_logged_in(user_id):
@@ -52,7 +56,7 @@ async def kod(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     wpisany_kod = context.args[0]
-    if potwierdz_kod(user_id, wpisany_kod):
+    if confirm_code(user_id, wpisany_kod):
         await update.message.reply_text("🎉 Sukces! Jesteś teraz zalogowany jako student.")
     else:
         await update.message.reply_text("❌ Nieprawidłowy kod. Sprawdź jeszcze raz.")
@@ -61,7 +65,7 @@ async def wyloguj(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if is_logged_in(user_id):
-        wyloguj_user(user_id)
+        logged_out(user_id)
         await update.message.reply_text("👋 Zostałeś wylogowany. Do zobaczenia wkrótce!")
     else:
         await update.message.reply_text("🔐 Nie jesteś aktualnie zalogowany.")
@@ -95,7 +99,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("zaloguj", zaloguj))
-    app.add_handler(CommandHandler("kod", kod))
+    app.add_handler(CommandHandler("kod", code))
     app.add_handler(CommandHandler("szukaj", szukaj))
     app.add_handler(CommandHandler("wyloguj", wyloguj))
     app.run_polling()

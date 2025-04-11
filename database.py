@@ -30,7 +30,7 @@ def init_db():
     cur.close()
     conn.close()
 
-def zapisz_email_i_kod(telegram_id, email, kod):
+def save_code_and_email(telegram_id, email, kod):
     conn = connect()
     cur = conn.cursor()
     cur.execute('''
@@ -45,7 +45,7 @@ def zapisz_email_i_kod(telegram_id, email, kod):
     cur.close()
     conn.close()
 
-def potwierdz_kod(telegram_id, wpisany_kod):
+def confirm_code(telegram_id, wpisany_kod):
     conn = connect()
     cur = conn.cursor()
     cur.execute("SELECT kod FROM users WHERE telegram_id = %s", (telegram_id,))
@@ -69,7 +69,7 @@ def is_logged_in(telegram_id):
     conn.close()
     return result is not None and result[0]
 
-def wyloguj_user(telegram_id):
+def logged_out(telegram_id):
     conn = connect()
     cur = conn.cursor()
     cur.execute("UPDATE users SET czy_zalogowany = FALSE WHERE telegram_id = %s", (telegram_id,))
