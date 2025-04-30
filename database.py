@@ -1,5 +1,5 @@
 import psycopg2
-
+#proverka na push
 DB_HOST = "dpg-cvmlag3uibrs73bj4u6g-a.frankfurt-postgres.render.com"
 DB_PORT = "5432"
 DB_NAME = "educhat_9erf"
