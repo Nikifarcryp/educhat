@@ -1,2 +1,6 @@
 psycopg2~=2.9.10
 dotenv
+google-search-results
+requests
+python-telegram-bot
+python-dotenv
