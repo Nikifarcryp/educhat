@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 from serpapi import GoogleSearch
@@ -60,6 +61,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -81,46 +83,90 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-    if query.data == "plan_zajec":
+    elif query.data == "plan_zajec":
         keyboard = [
-            [InlineKeyboardButton("Poniedziałek", callback_data="plan_poniedzialek")],
-            [InlineKeyboardButton("Wtorek", callback_data="plan_wtorek")],
-            [InlineKeyboardButton("Środa", callback_data="plan_sroda")],
-            [InlineKeyboardButton("Czwartek", callback_data="plan_czwartek")],
-            [InlineKeyboardButton("Piątek", callback_data="plan_piatek")],
-            [InlineKeyboardButton("↩️ Wróć do menu głównego", callback_data="menu_glowne")]
+            [InlineKeyboardButton("📅 Dzisiaj", callback_data="plan_dzisiaj"),
+             InlineKeyboardButton("📆 Jutro", callback_data="plan_jutro")],
+            [InlineKeyboardButton("🗓️ Tydzień", callback_data="plan_tydzien")],
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            text="📚 Wybierz dzień tygodnia:",
+            text="🚀 Super!\nTeraz wybierz odpowiednią dla siebie opcję:",
             reply_markup=reply_markup
         )
 
-    elif query.data.startswith("plan_"):
-        # Bot pokazuje plan na wybrany dzień + przycisk powrotu
+    elif query.data == "plan_dzisiaj":
+        today = datetime.today().weekday()
+        dni = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"]
+        dzien = dni[today]
+
         plany = {
-            "plan_poniedzialek": "📅 Plan na Poniedziałek:\n\n- 8:00 Matematyka\n- 10:00 Programowanie\n- 12:00 Angielski",
-            "plan_wtorek": "📅 Plan na Wtorek:\n\n- 9:00 Ekonomia\n- 11:00 Prawo\n- 13:00 Zarządzanie Projektami",
-            "plan_sroda": "📅 Plan na Środę:\n\n- 8:00 Fizyka\n- 10:00 Chemia\n- 12:00 Historia",
-            "plan_czwartek": "📅 Plan na Czwartek:\n\n- 9:00 Filozofia\n- 11:00 Statystyka\n- 13:00 Socjologia",
-            "plan_piatek": "📅 Plan na Piątek:\n\n- 8:00 Projekt zespołowy\n- 10:00 Informatyka\n- 12:00 Sport"
+            "poniedziałek": "📅 Dzisiaj (Poniedziałek):\n\n- 8:00 Matematyka\n- 10:00 Programowanie\n- 12:00 Angielski",
+            "wtorek": "📅 Dzisiaj (Wtorek):\n\n- 9:00 Ekonomia\n- 11:00 Prawo\n- 13:00 Zarządzanie Projektami",
+            "środa": "📅 Dzisiaj (Środa):\n\n- 8:00 Fizyka\n- 10:00 Chemia\n- 12:00 Historia",
+            "czwartek": "📅 Dzisiaj (Czwartek):\n\n- 9:00 Filozofia\n- 11:00 Statystyka\n- 13:00 Socjologia",
+            "piątek": "📅 Dzisiaj (Piątek):\n\n- 8:00 Projekt zespołowy\n- 10:00 Informatyka\n- 12:00 Sport",
+            "sobota": "📅 Dzisiaj (Sobota):\n\nBrak zajęć 🎉",
+            "niedziela": "📅 Dzisiaj (Niedziela):\n\nBrak zajęć 🎉"
         }
 
-        text = plany.get(query.data, "Brak danych dla tego dnia.")
-
         keyboard = [
-            [InlineKeyboardButton("↩️ Wróć do menu głównego", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<<Wstecz", callback_data="menu_glowne")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            text=text,
+            text=plany[dzien],
+            reply_markup=reply_markup
+        )
+
+    elif query.data == "plan_jutro":
+        tomorrow = (datetime.today() + timedelta(days=1)).weekday()
+        dni = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"]
+        dzien = dni[tomorrow]
+
+        plany = {
+            "poniedziałek": "📆 Jutro (Poniedziałek):\n\n- 8:00 Matematyka\n- 10:00 Programowanie\n- 12:00 Angielski",
+            "wtorek": "📆 Jutro (Wtorek):\n\n- 9:00 Ekonomia\n- 11:00 Prawo\n- 13:00 Zarządzanie Projektami",
+            "środa": "📆 Jutro (Środa):\n\n- 8:00 Fizyka\n- 10:00 Chemia\n- 12:00 Historia",
+            "czwartek": "📆 Jutro (Czwartek):\n\n- 9:00 Filozofia\n- 11:00 Statystyka\n- 13:00 Socjologia",
+            "piątek": "📆 Jutro (Piątek):\n\n- 8:00 Projekt zespołowy\n- 10:00 Informatyka\n- 12:00 Sport",
+            "sobota": "📆 Jutro (Sobota):\n\nBrak zajęć 🎉",
+            "niedziela": "📆 Jutro (Niedziela):\n\nBrak zajęć 🎉"
+        }
+
+        keyboard = [
+            [InlineKeyboardButton("<<Wstecz", callback_data="menu_glowne")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text=plany[dzien],
+            reply_markup=reply_markup
+        )
+
+    elif query.data == "plan_tydzien":
+        keyboard = [
+            [InlineKeyboardButton("<<Wstecz", callback_data="menu_glowne")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text=(
+                "🗓️ Plan na cały tydzień:\n\n"
+                "📅 Poniedziałek: Matematyka, Programowanie, Angielski\n"
+                "📆 Wtorek: Ekonomia, Prawo, Zarządzanie\n"
+                "📅 Środa: Fizyka, Chemia, Historia\n"
+                "📆 Czwartek: Filozofia, Statystyka, Socjologia\n"
+                "📅 Piątek: Projekt zespołowy, Informatyka, Sport\n"
+                "📖 Weekend: Brak zajęć 🎉"
+            ),
             reply_markup=reply_markup
         )
 
     elif query.data == "menu_glowne":
-        # Bot wraca do głównego menu
         keyboard = [
             [InlineKeyboardButton("Plan zajęć", callback_data="plan_zajec"), InlineKeyboardButton("Aktualności", callback_data="aktualnosci")],
             [InlineKeyboardButton("Przestrzeń robocza", callback_data="przestrzen_robocza"), InlineKeyboardButton("Asystent AI", callback_data="asystent_ai")],
@@ -129,7 +175,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            text="🎓 Menu główne:",
+            text="🎓 Menu główne:\n\nWybierz, co chcesz zrobić:",
             reply_markup=reply_markup
         )
 
