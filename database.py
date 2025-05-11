@@ -1,18 +1,14 @@
 import psycopg2
 #proverka na push
-DB_HOST = "dpg-cvmlag3uibrs73bj4u6g-a.frankfurt-postgres.render.com"
-DB_PORT = "5432"
-DB_NAME = "educhat_9erf"
-DB_USER = "educhat_9erf_user"
-DB_PASSWORD = "Wq6byhOgtdbo0rMr3Upxn4EYelBC8oVN"
 
 def connect():
     return psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD
+        host="ep-proud-star-a2jggurn-pooler.eu-central-1.aws.neon.tech",
+        database="neondb",
+        user="neondb_owner",
+        password="npg_mHiSW8NYr2uB",  # <- wklej hasło z Neona
+        port="5432",
+        sslmode="require"
     )
 
 def init_db():
