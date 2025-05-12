@@ -165,8 +165,102 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "asystent_ai":
         await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️")
 
+
     elif query.data == "dalej":
-        await query.edit_message_text("➡️ Funkcja 'Dalej' w budowie... 🛠️")
+
+        keyboard = [
+
+            [InlineKeyboardButton("Deadline tracker", callback_data="deadline"),
+
+             InlineKeyboardButton("Notatki", callback_data="notatki")],
+
+            [InlineKeyboardButton("Literatura", callback_data="literatura"),
+
+             InlineKeyboardButton("Lista funkcji", callback_data="lista_funkcji")],
+
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne"),
+
+             InlineKeyboardButton("Dalej >>", callback_data="dalej2")]
+
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+
+            text="🧠 Menu główne:\n\nWybierz, co chcesz zrobić:",
+
+            reply_markup=reply_markup
+
+        )
+
+    elif query.data == "deadline":
+
+        await query.edit_message_text("⏳ Funkcja 'Deadline tacker' w budowie... 🛠️")
+
+
+    elif query.data == "notatki":
+
+        await query.edit_message_text("📝 Funkcja 'Notatki' w budowie... 🛠️")
+
+
+    elif query.data == "literatura":
+
+        await query.edit_message_text("📚 Funkcja 'Literatura' w budowie... 🛠️")
+
+
+    elif query.data == "lista_funkcji":
+
+        await query.edit_message_text("🧾 Funkcja 'Lista funkcji' w budowie... 🛠️")
+
+
+
+    elif query.data == "dalej2":
+
+        keyboard = [
+
+            [InlineKeyboardButton("Konto", callback_data="konto"),
+
+             InlineKeyboardButton("O nas", callback_data="o_nas")],
+
+            [InlineKeyboardButton("Wsparcie", callback_data="wsparcie"),
+
+             InlineKeyboardButton("Prywatność", callback_data="prywatnosc")],
+
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej")]
+
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+
+            text="⚙️ Menu główne:\n\nWybierz, co chcesz zrobić:",
+
+            reply_markup=reply_markup
+
+        )
+
+
+    elif query.data == "konto":
+
+        await query.edit_message_text("👤 Funkcja 'Konto' w budowie... 🛠️")
+
+
+    elif query.data == "o_nas":
+
+        await query.edit_message_text("ℹ️ Funkcja 'O nas' w budowie... 🛠️")
+
+
+    elif query.data == "wsparcie":
+
+        await query.edit_message_text("🤝 Funkcja 'Wsparcie' w budowie... 🛠️")
+
+
+    elif query.data == "prywatnosc":
+
+        await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️")
+
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
