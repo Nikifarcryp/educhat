@@ -83,10 +83,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+
     elif query.data == "plan_zajec":
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="🚀Super! \n Teraz wybierz odpowiednią dla siebie opcję",
+        await query.edit_message_text(
+            text="🚀 Super! \nTeraz wybierz odpowiednią dla siebie opcję:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Dzisiaj", callback_data="plan_dzisiaj"),
                  InlineKeyboardButton("Jutro", callback_data="plan_jutro")],
@@ -95,52 +95,62 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
+
     elif query.data == "plan_dzisiaj":
         today = datetime.today()
         text, markup = get_plan_for_day(today)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode="HTML")
-
-        keyboard = [
-            [InlineKeyboardButton("<<Wstecz", callback_data="plan_zajec")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
+        await query.edit_message_text(text=text, reply_markup=markup, parse_mode="HTML")
 
 
     elif query.data == "plan_jutro":
         tomorrow = datetime.today() + timedelta(days=1)
         text, markup = get_plan_for_day(tomorrow)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode="HTML")
-
-        plany = {
-            "poniedziałek": "📆 Jutro (Poniedziałek):\n\n- 8:00 Matematyka\n- 10:00 Programowanie\n- 12:00 Angielski",
-            "wtorek": "📆 Jutro (Wtorek):\n\n- 9:00 Ekonomia\n- 11:00 Prawo\n- 13:00 Zarządzanie Projektami",
-            "środa": "📆 Jutro (Środa):\n\n- 8:00 Fizyka\n- 10:00 Chemia\n- 12:00 Historia",
-            "czwartek": "📆 Jutro (Czwartek):\n\n- 9:00 Filozofia\n- 11:00 Statystyka\n- 13:00 Socjologia",
-            "piątek": "📆 Jutro (Piątek):\n\n- 8:00 Projekt zespołowy\n- 10:00 Informatyka\n- 12:00 Sport",
-            "sobota": "📆 Jutro (Sobota):\n\nBrak zajęć 🎉",
-            "niedziela": "📆 Jutro (Niedziela):\n\nBrak zajęć 🎉"
-        }
-
-        keyboard = [
-            [InlineKeyboardButton("<<Wstecz", callback_data="plan_zajec")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=text, reply_markup=markup, parse_mode="HTML")
 
 
 
     elif query.data == "plan_tydzien":
         image_url, caption = get_week_plan_image_and_caption(datetime.today())
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
+
+        sent_photo = await context.bot.send_photo(
+            chat_id=query.message.chat_id,
             photo=image_url,
             caption=caption,
-            parse_mode="HTML",
+            parse_mode="HTML"
+        )
+
+
+        context.user_data["plan_image_message_id"] = sent_photo.message_id
+
+        await query.edit_message_text(
+            text="🖼️ Wyświetlono plan tygodnia. Możesz wrócić do menu:",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("<< Wstecz", callback_data="plan_zajec")]
+                [InlineKeyboardButton("<< Wstecz", callback_data="plan_zajec_back")]
             ])
         )
 
+    elif query.data == "plan_zajec_back":
+        # Usuń wiadomość ze zdjęciem
+        if "plan_image_message_id" in context.user_data:
+            try:
+                await context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=context.user_data["plan_image_message_id"]
+                )
+            except:
+                pass  # ignorujemy błędy przy usuwaniu
+            del context.user_data["plan_image_message_id"]
+
+        # Edytujemy obecną wiadomość – wracamy do wyboru opcji planu
+        await query.edit_message_text(
+            text="🚀 Super! \nTeraz wybierz odpowiednią dla siebie opcję:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Dzisiaj", callback_data="plan_dzisiaj"),
+                 InlineKeyboardButton("Jutro", callback_data="plan_jutro")],
+                [InlineKeyboardButton("Tydzień", callback_data="plan_tydzien")],
+                [InlineKeyboardButton("<< Wróć", callback_data="menu_glowne")]
+            ])
+        )
 
 
     elif query.data == "menu_glowne":
