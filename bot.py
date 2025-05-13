@@ -7,6 +7,9 @@ from serpapi import GoogleSearch
 import random
 from database import *
 from plan_zajec_c371 import get_plan_for_day, get_week_plan_text, get_week_plan_image_and_caption
+from database import save_note
+from telegram.ext import MessageHandler, filters
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -179,19 +182,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "dalej":
 
         keyboard = [
-
             [InlineKeyboardButton("Deadline tracker", callback_data="deadline"),
-
              InlineKeyboardButton("Notatki", callback_data="notatki")],
-
             [InlineKeyboardButton("Literatura", callback_data="literatura"),
-
              InlineKeyboardButton("Lista funkcji", callback_data="lista_funkcji")],
-
             [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne"),
-
              InlineKeyboardButton("Dalej >>", callback_data="dalej2")]
-
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -199,28 +195,154 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
 
             text="🧠 Menu główne:\n\nWybierz, co chcesz zrobić:",
-
             reply_markup=reply_markup
 
         )
 
     elif query.data == "deadline":
-
         await query.edit_message_text("⏳ Funkcja 'Deadline tacker' w budowie... 🛠️")
 
 
     elif query.data == "notatki":
 
-        await query.edit_message_text("📝 Funkcja 'Notatki' w budowie... 🛠️")
+        keyboard = [
+            [InlineKeyboardButton("📖 Moje notatki", callback_data="moje_notatki"),
+             InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej"),
+             InlineKeyboardButton("🧠 AI-notatki", callback_data="przepisnotatki")]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text="🗂️ Notatki – wybierz opcję:",
+            reply_markup=reply_markup
+
+        )
+    elif query.data == "dodaj_notatke":
+        context.user_data.clear()
+        context.user_data["dodaj_notatke"] = True
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Anuluj i wróć do notatek", callback_data="anuluj_dodawanie")]
+        ])
+
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text="*📷 Prześlij zdjęcie swojej notatki jako wiadomość.*\n\nJeśli nie chcesz, kliknij przycisk anulowania poniżej 👇",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+
+
+    elif query.data == "anuluj_dodawanie":
+        context.user_data.clear()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📖 Moje notatki", callback_data="moje_notatki"),
+             InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej"),
+             InlineKeyboardButton("🔄 Na PDF", callback_data="konwertuj_pdf")]
+        ])
+
+        await query.edit_message_text(
+            text="📂 Notatki – wybierz opcję:",
+            reply_markup=keyboard
+        )
+
+
+
+    elif query.data == "moje_notatki":
+
+        user_id = query.from_user.id
+        notes = get_user_notes(user_id)
+
+        if not notes:
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
+                [InlineKeyboardButton("⬅️ Powrót do menu notatek", callback_data="notatki")]
+            ])
+
+            await query.edit_message_text(
+                text="📭 Nie masz jeszcze żadnych notatek.\n\nChcesz dodać swoją pierwszą?",
+                reply_markup=keyboard
+            )
+            return
+
+        for note in notes:
+            note_id, file_id, podpis = note
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗑 Usuń", callback_data=f"usun_{note_id}")]
+            ])
+
+            await context.bot.send_photo(
+                chat_id=user_id,
+                photo=file_id,
+                caption=f"📝 {podpis}",
+                reply_markup=keyboard
+            )
+
+    elif query.data.startswith("usun_"):
+        note_id = int(query.data.split("_")[1])
+        podpis = get_note_signature(note_id)
+
+        if not podpis:
+            await context.bot.send_message(
+                chat_id=query.from_user.id,
+                text="⚠️ Nie znaleziono notatki."
+            )
+            return
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Tak", callback_data=f"potwierdz_usun_{note_id}"),
+             InlineKeyboardButton("❌ Nie", callback_data="notatki")]
+        ])
+
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=f"Czy na pewno chcesz usunąć notatkę:\n\n„{podpis}”?",
+            reply_markup=keyboard
+        )
+
+
+    elif query.data.startswith("potwierdz_usun_"):
+        note_id = int(query.data.split("_")[2])
+        podpis = get_note_signature(note_id)
+        delete_note(note_id)
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
+        ])
+
+        await query.edit_message_text(
+            text=f"🗑 Notatka „{podpis}” została usunięta.",
+            reply_markup=keyboard
+        )
+
+    elif query.data == "przepisnotatki":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
+        ])
+
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=(
+                "🧠 *Zamień bałagan na porządek – dzięki AI!*\n\n"
+                "Masz notatki z krzywym pismem, których sam już nie możesz odczytać?\n\n"
+                "To narzędzie odczytuje Twoją notatkę i tworzy z niej czytelny, uporządkowany dokument – gotowy do nauki, PDF-a lub druku.\n\n"
+                "👉 [Kliknij tutaj](https://www.revisely.com/quiz-generator)\n\n"
+                "Działa w ponad 50 językach – w tym po polsku 🇵🇱"
+            ),
+            parse_mode="Markdown",
+            reply_markup = keyboard
+        )
 
 
     elif query.data == "literatura":
-
         await query.edit_message_text("📚 Funkcja 'Literatura' w budowie... 🛠️")
 
-
     elif query.data == "lista_funkcji":
-
         await query.edit_message_text("🧾 Funkcja 'Lista funkcji' w budowie... 🛠️")
 
 
@@ -228,48 +350,94 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "dalej2":
 
         keyboard = [
-
             [InlineKeyboardButton("Konto", callback_data="konto"),
-
              InlineKeyboardButton("O nas", callback_data="o_nas")],
-
             [InlineKeyboardButton("Wsparcie", callback_data="wsparcie"),
-
              InlineKeyboardButton("Prywatność", callback_data="prywatnosc")],
-
             [InlineKeyboardButton("<< Wstecz", callback_data="dalej")]
-
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-
         await query.edit_message_text(
 
             text="⚙️ Menu główne:\n\nWybierz, co chcesz zrobić:",
-
             reply_markup=reply_markup
 
         )
 
 
     elif query.data == "konto":
-
         await query.edit_message_text("👤 Funkcja 'Konto' w budowie... 🛠️")
 
-
     elif query.data == "o_nas":
-
         await query.edit_message_text("ℹ️ Funkcja 'O nas' w budowie... 🛠️")
 
-
     elif query.data == "wsparcie":
-
         await query.edit_message_text("🤝 Funkcja 'Wsparcie' w budowie... 🛠️")
 
-
     elif query.data == "prywatnosc":
-
         await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️")
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("dodaj_notatke"):
+        photo = update.message.photo[-1]
+        file_id = photo.file_id
+        context.user_data["nowa_notatka_file_id"] = file_id
+        context.user_data["dodaj_notatke"] = False
+        context.user_data["czekam_na_podpis"] = True
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Anuluj i wróć do notatek", callback_data="anuluj_dodawanie")]
+        ])
+
+        await update.message.reply_text(
+            "*✍️ Wpisz podpis do tej notatki.*\n\nJeśli nie chcesz, kliknij przycisk anulowania poniżej 👇",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("czekam_na_podpis"):
+        podpis = update.message.text
+        user_id = update.effective_user.id
+        file_id = context.user_data.get("nowa_notatka_file_id")
+
+        save_note(user_id, file_id, podpis)
+        context.user_data.clear()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Dodaj kolejną", callback_data="dodaj_notatke"),
+             InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
+        ])
+
+        await update.message.reply_text(
+            "✅ Notatka została zapisana!\n\nCo teraz?",
+            reply_markup=keyboard
+        )
+
+async def clean_send(update_or_query, context, text, reply_markup=None, photo=None):
+    chat_id = update_or_query.effective_chat.id if hasattr(update_or_query, 'effective_chat') else update_or_query.message.chat.id
+
+    # Удалить предыдущее сообщение, если есть
+    if "ostatnie_id" in context.user_data:
+        try:
+            await context.bot.delete_message(chat_id, context.user_data["ostatnie_id"])
+        except:
+            pass
+
+    # Отправить фото или текст
+    if photo:
+        msg = await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=text, reply_markup=reply_markup)
+    else:
+        if hasattr(update_or_query, "message"):
+            msg = await update_or_query.message.reply_text(text, reply_markup=reply_markup)
+        else:
+            msg = await update_or_query.edit_message_text(text=text, reply_markup=reply_markup)
+
+    # Сохранить ID
+    context.user_data["ostatnie_id"] = msg.message_id
+
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -388,4 +556,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("kod", code))
     app.add_handler(CommandHandler("szukaj", szukaj))
     app.add_handler(CommandHandler("wyloguj", wyloguj))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.run_polling()
