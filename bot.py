@@ -9,6 +9,7 @@ from database import *
 from plan_zajec_c371 import get_plan_for_day, get_week_plan_text, get_week_plan_image_and_caption
 from database import save_note
 from telegram.ext import MessageHandler, filters
+from telegram.request import HTTPXRequest
 
 load_dotenv()
 
@@ -229,11 +230,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=query.from_user.id,
-            text="*📷 Prześlij zdjęcie swojej notatki jako wiadomość.*\n\nJeśli nie chcesz, kliknij przycisk anulowania poniżej 👇",
-            parse_mode="Markdown",
-            reply_markup=keyboard
+            text="**📎 Prześlij zdjęcie *lub plik PDF* swojej notatki jako wiadomość.**\n\n*Jeśli nie chcesz, kliknij przycisk anulowania poniżej 👇*",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
         )
-
 
 
     elif query.data == "anuluj_dodawanie":
@@ -276,12 +276,32 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🗑 Usuń", callback_data=f"usun_{note_id}")]
             ])
 
-            await context.bot.send_photo(
-                chat_id=user_id,
-                photo=file_id,
-                caption=f"📝 {podpis}",
-                reply_markup=keyboard
-            )
+            if file_id.startswith("AgAC"):  # Telegram photo file_id usually starts like this
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=file_id,
+                    caption=f"📝 {podpis}",
+                    reply_markup=keyboard
+                )
+            else:
+                await context.bot.send_document(
+                    chat_id=user_id,
+                    document=file_id,
+                    caption=f"📝 {podpis}",
+                    reply_markup=keyboard
+                )
+
+        # 🔽 После цикла — кнопка вернуться в меню
+        keyboard_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
+        ])
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="📁 To wszystkie Twoje notatki.",
+            reply_markup=keyboard_back
+        )
+
 
     elif query.data.startswith("usun_"):
         note_id = int(query.data.split("_")[1])
@@ -378,10 +398,30 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "prywatnosc":
         await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️")
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_note_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("dodaj_notatke"):
-        photo = update.message.photo[-1]
-        file_id = photo.file_id
+        file_id = None
+
+        # Фото
+        if update.message.photo:
+            photo = update.message.photo[-1]
+            file_id = photo.file_id
+
+        # PDF-документ
+        elif update.message.document:
+            document = update.message.document
+            if document.mime_type == 'application/pdf':
+                file_id = document.file_id
+            else:
+                await update.message.reply_text("❌ Niewłaściwy format pliku. Możesz przesłać tylko zdjęcie lub plik PDF.")
+                return
+
+        # Ничего не отправил или странный тип файла
+        else:
+            await update.message.reply_text("❌ Musisz przesłać zdjęcie lub plik PDF. Inne formaty nie są obsługiwane.")
+            return
+
+        # Успешная обработка
         context.user_data["nowa_notatka_file_id"] = file_id
         context.user_data["dodaj_notatke"] = False
         context.user_data["czekam_na_podpis"] = True
@@ -391,10 +431,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
         await update.message.reply_text(
-            "*✍️ Wpisz podpis do tej notatki.*\n\nJeśli nie chcesz, kliknij przycisk anulowania poniżej 👇",
+            "**✍️ Wpisz podpis do tej notatki.**\n\n*Jeśli nie chcesz, kliknij przycisk anulowania poniżej 👇*",
             parse_mode="Markdown",
             reply_markup=keyboard
         )
+
+
+
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -546,9 +589,23 @@ async def szukaj(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Niestety, nic nie znalazłam 😢")
 
+async def handle_invalid_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("dodaj_notatke"):
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
+        ])
+
+        await update.message.reply_text(
+            "❌ Możesz przesłać tylko zdjęcie lub plik PDF. Inne formaty i wiadomości tekstowe nie są obsługiwane.",
+            reply_markup=keyboard
+        )
+
 if __name__ == '__main__':
     init_db()
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder() \
+        .token(BOT_TOKEN) \
+        .request(HTTPXRequest(read_timeout=20)) \
+        .build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(CommandHandler("status", status))
@@ -556,6 +613,9 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("kod", code))
     app.add_handler(CommandHandler("szukaj", szukaj))
     app.add_handler(CommandHandler("wyloguj", wyloguj))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.PDF, handle_note_upload))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))  # ⬅️ поднимаем выше
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.TEXT, handle_invalid_upload))
+
     app.run_polling()
