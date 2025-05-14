@@ -5,13 +5,15 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 PLAN_C371 = {
     "poniedziałek": {
         "even": [
-            {"godzina": "8:15", "przedmiot": "Testowanie oprogramowania (LB)", "prowadzący": "dr Artur Kułpa", "sala": "s. SIL 137/138 Lab. Cuk.8"},
-            {"godzina": "9:45", "przedmiot": "Programowanie aplikacji chmurowych (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": "s. 423 Lab. Cuk.8"},
-            {"godzina": "11:30", "przedmiot": "Programowanie aplikacji chmurowych (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": "s. 423 Lab. Cuk.8"},
+            {"godzina": "8:15", "przedmiot": "Testowanie oprogramowania (Wykład)", "prowadzący": "dr Artur Kulpa", "sala": "s. s.112 Lab. Cuk.8"},
+            {"godzina": "10:00", "przedmiot": "Programowanie aplikacji chmurowych (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": "s. 423 Lab. Cuk.8"},
+            {"godzina": "12:00", "przedmiot": "Testowanie oprogramowania (LB)", "prowadzący": "dr Artur Kulpa", "sala": "SIL 137/138 Lab. Cuk.8"},
+            {"godzina": "13:45", "przedmiot": "Testowanie oprogramowania (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": "SIL 137/138 Lab. Cuk.8"}
         ],
         "odd": [
-            {"godzina": "8:15", "przedmiot": "Systemy ERP (W)", "prowadzący": "dr Joanna Jasińska", "sala": "s. 205 Cuk.8"},
-            {"godzina": "9:45", "przedmiot": "Systemy ERP (W)", "prowadzący": "dr Joanna Jasińska", "sala": "s. 205 Cuk.8"},
+            {"godzina": "8:15", "przedmiot": "Programowanie aplikacji chmurowych (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": " s. 423 Cuk.8"},
+            {"godzina": "10:00", "przedmiot": "Programowanie aplikacji chmurowych (LB)", "prowadzący": "dr Janusz Jakubiński", "sala": " s. 423 Cuk.8"},
+            {"godzina": "12:00", "przedmiot": "Testowanie oprogramowania (LB)", "prowadzący": "dr Artur Kulpa", "sala": "SIL 137/138 Cuk.8"}
         ]
     },
     "wtorek": {
@@ -19,38 +21,34 @@ PLAN_C371 = {
             {"godzina": "12:00", "przedmiot": "Prawo w działalności gospodarczej (W)", "prowadzący": "dr Konrad Garnowski", "sala": "s. 307 Cuk.8"},
         ],
         "odd": [
-            {"godzina": "12:00", "przedmiot": "Prawo w działalności gospodarczej (W)", "prowadzący": "dr Konrad Garnowski", "sala": "s. 307 Cuk.8"},
+
         ]
     },
     "środa": {
         "even": [
-            {"godzina": "10:00", "przedmiot": "Programowanie aplikacji chmurowych (W)", "prowadzący": "Tomasz Zdziebko", "sala": "s. 307 Cuk.8"},
-            {"godzina": "12:00", "przedmiot": "Zespołowy projekt z aplikacji internetowych (K)", "prowadzący": "dr inż. Mateusz Piwowarski", "sala": "s. SIL 204 Cuk.8"},
+            {"godzina": "10:00", "przedmiot": "Programowanie aplikacji chmurowych (Wykład)", "prowadzący": "Tomasz Zdziebko", "sala": "s. 307 Cuk.8"},
+            {"godzina": "13:45", "przedmiot": "Zespołowy projekt z aplikacji internetowych (K)", "prowadzący": "dr inż. Mateusz Piwowarski", "sala": "s. SIL 204 Cuk.8"},
         ],
         "odd": [
-            {"godzina": "12:00", "przedmiot": "Zespołowy projekt z aplikacji internetowych (K)", "prowadzący": "dr inż. Mateusz Piwowarski", "sala": "s. SIL 204 Cuk.8"}
+            {"godzina": "10:00", "przedmiot": "Seminarium Dyplomowe (S)", "prowadzący": "dr hab. prof. US Ewa Krok", "sala": "gab. 418 Cuk.8"}
         ]
     },
     "czwartek": {
         "even": [
-            {"godzina": "10:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
-            {"godzina": "12:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
-            {"godzina": "13:45", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
+            {"godzina": "10:00", "przedmiot": "Język angielski (adv)", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
+            {"godzina": "12:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"}
         ],
         "odd": [
-            {"godzina": "10:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
+            {"godzina": "10:00", "przedmiot": "Język angielski (adv)", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
             {"godzina": "12:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"}
         ]
     },
     "piątek": {
         "even": [
-            {"godzina": "10:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
-            {"godzina": "12:00", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
-            {"godzina": "13:45", "przedmiot": "Język angielski", "prowadzący": "mgr Iwona Rokita-Lisiecka", "sala": "s. 046 Cukrowa 8"},
+
         ],
         "odd": [
-            {"godzina": "12:00", "przedmiot": "Testowanie oprogramowania (W)", "prowadzący": "dr Artur Kułpa", "sala": "s. 205 Cuk.8"},
-            {"godzina": "13:45", "przedmiot": "Testowanie oprogramowania (W)", "prowadzący": "dr Artur Kułpa", "sala": "s. 205 Cuk.8"}
+
         ]
     }
 }

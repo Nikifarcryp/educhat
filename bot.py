@@ -1,8 +1,8 @@
-import os
+import os, re
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from serpapi import GoogleSearch
 import random
 from database import *
@@ -10,7 +10,11 @@ from plan_zajec_c371 import get_plan_for_day, get_week_plan_text, get_week_plan_
 from database import save_note
 from telegram.ext import MessageHandler, filters
 from telegram.request import HTTPXRequest
-
+from deadline_tracker import (
+    create_deadline_table, add_deadline, get_deadlines,
+    delete_deadline, update_deadline, format_deadline_list,
+    deadline_main_menu, get_deadline_by_index, edit_prompt, get_upcoming_deadlines
+)
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -170,20 +174,60 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
+
     elif query.data == "aktualnosci":
-        await query.edit_message_text("📰 Funkcja 'Aktualności' w budowie... 🛠️")
+        user_id = query.from_user.id
+        upcoming = get_upcoming_deadlines(user_id)
+        if not upcoming:
+            await query.edit_message_text(
+                "📭 Brak nadchodzących wydarzeń w ciągu 5 dni.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+                ])
+            )
+
+        else:
+            message = "📰 <b>Twoje najbliższe wydarzenia:</b>\n\n"
+            for task, date in upcoming:
+                message += (
+                    f"📌 <b>{task}</b>\n"
+                    f"🗓️ <i>Wydarzenie odbędzie się {date}</i>\n"
+                    f"<i>📅 Opublikowano: {datetime.today().strftime('%d.%m.%y')}</i>\n\n"
+                )
+
+            await query.edit_message_text(
+                message,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+                ])
+            )
+
 
     elif query.data == "przestrzen_robocza":
-        await query.edit_message_text("📂 Funkcja 'Przestrzeń robocza' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+
+        await query.edit_message_text(
+            text="📂 Funkcja 'Przestrzeń robocza' w budowie... 🛠️",
+            reply_markup=keyboard
+        )
+
+
 
     elif query.data == "asystent_ai":
-        await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️",
+        reply_markup=keyboard)
 
 
     elif query.data == "dalej":
 
         keyboard = [
-            [InlineKeyboardButton("Deadline tracker", callback_data="deadline"),
+            [InlineKeyboardButton("Terminy", callback_data="deadline"),
              InlineKeyboardButton("Notatki", callback_data="notatki")],
             [InlineKeyboardButton("Literatura", callback_data="literatura"),
              InlineKeyboardButton("Lista funkcji", callback_data="lista_funkcji")],
@@ -200,9 +244,61 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         )
 
-    elif query.data == "deadline":
-        await query.edit_message_text("⏳ Funkcja 'Deadline tacker' w budowie... 🛠️")
 
+    elif query.data == "deadline":
+        await query.edit_message_text(
+            text="🌸 Witaj w zarządzaniu terminami!\n\n"
+                 "Tutaj możesz zapisywać wszystkie ważne terminy – oddania prac, kolokwia, egzaminy, a także osobiste zadania i przypomnienia.\n\n"
+                 "Dzięki temu nic Ci nie umknie – wszystko w jednym miejscu, zawsze pod ręką.\n\nCo chcesz zrobić?",
+            reply_markup=deadline_main_menu()
+        )
+
+    elif query.data == "add_deadline":
+        await query.edit_message_text(
+            text="✏️ Podaj nazwę wydarzenia i termin w formacie:\nnazwa – DD.MM.RRRR\n\nPrzykład:\nPrezentacja z marketingu - 16.05",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("<< Wstecz", callback_data="deadline")]])
+        )
+        context.user_data["awaiting_deadline"] = True
+
+    elif query.data == "view_deadlines":
+        user_id = query.from_user.id
+        deadlines = get_deadlines(user_id)
+        text = format_deadline_list(deadlines)
+        await query.edit_message_text(
+            text=text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("<< Wstecz", callback_data="deadline")]]),
+            parse_mode="HTML"
+        )
+
+    elif query.data == "edit_deadline":
+        user_id = query.from_user.id
+        deadlines = get_deadlines(user_id)
+        if not deadlines:
+            await query.edit_message_text(
+                "📭 Nie masz jeszcze żadnych terminów.",
+                reply_markup=deadline_main_menu()
+            )
+        else:
+            context.user_data["deadline_action"] = "edit"
+            await query.edit_message_text(
+                format_deadline_list(deadlines),
+                reply_markup=deadline_main_menu()
+            )
+
+    elif query.data == "delete_deadline":
+        user_id = query.from_user.id
+        deadlines = get_deadlines(user_id)
+        if not deadlines:
+            await query.edit_message_text(
+                "📭 Nie masz jeszcze żadnych terminów.",
+                reply_markup=deadline_main_menu()
+            )
+        else:
+            context.user_data["deadline_action"] = "delete"
+            await query.edit_message_text(
+                format_deadline_list(deadlines),
+                reply_markup=deadline_main_menu()
+            )
 
     elif query.data == "notatki":
 
@@ -261,7 +357,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not notes:
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
-                [InlineKeyboardButton("⬅️ Powrót do menu notatek", callback_data="notatki")]
+                [InlineKeyboardButton("<<Wstecz", callback_data="notatki")]
             ])
 
             await query.edit_message_text(
@@ -360,10 +456,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     elif query.data == "literatura":
-        await query.edit_message_text("📚 Funkcja 'Literatura' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("📚 Funkcja 'Literatura' w budowie... 🛠️",
+        reply_markup=keyboard)
 
     elif query.data == "lista_funkcji":
-        await query.edit_message_text("🧾 Funkcja 'Lista funkcji' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("🧾 Funkcja 'Lista funkcji' w budowie... 🛠️",
+        reply_markup=keyboard)
 
 
 
@@ -387,16 +491,35 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     elif query.data == "konto":
-        await query.edit_message_text("👤 Funkcja 'Konto' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("👤 Funkcja 'Konto' w budowie... 🛠️",
+        reply_markup=keyboard)
 
     elif query.data == "o_nas":
-        await query.edit_message_text("ℹ️ Funkcja 'O nas' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("ℹ️ Funkcja 'O nas' w budowie... 🛠️",
+        reply_markup=keyboard
+    )
 
     elif query.data == "wsparcie":
-        await query.edit_message_text("🤝 Funkcja 'Wsparcie' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("🤝 Funkcja 'Wsparcie' w budowie... 🛠️",
+        reply_markup=keyboard
+    )
 
     elif query.data == "prywatnosc":
-        await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ])
+        await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️",
+        reply_markup=keyboard
+    )
 
 async def handle_note_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("dodaj_notatke"):
@@ -546,16 +669,16 @@ async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "plan_zajec":
-        await query.edit_message_text("📚 Funkcja 'Plan zajęć' w budowie... 🛠️")
-    elif query.data == "aktualnosci":
-        await query.edit_message_text("📰 Funkcja 'Aktualności' w budowie... 🛠️")
-    elif query.data == "przestrzen_robocza":
-        await query.edit_message_text("📂 Funkcja 'Przestrzeń robocza' w budowie... 🛠️")
-    elif query.data == "asystent_ai":
-        await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️")
-    elif query.data == "dalej":
-        await query.edit_message_text("➡️ Funkcja 'Dalej' w budowie... 🛠️")
+    #if query.data == "plan_zajec":
+       #await query.edit_message_text("📚 Funkcja 'Plan zajęć' w budowie... 🛠️")
+    #elif query.data == "aktualnosci":
+#await query.edit_message_text("📰 Funkcja 'Aktualności' w budowie... 🛠️")
+    #elif query.data == "przestrzen_robocza":
+     #   await query.edit_message_text("📂 Funkcja 'Przestrzeń robocza' w budowie... 🛠️")
+  #  elif query.data == "asystent_ai":
+#        await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️")
+#    elif query.data == "dalej":
+ #       await query.edit_message_text("➡️ Funkcja 'Dalej' w budowie... 🛠️")
 
 async def wyloguj(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -600,12 +723,108 @@ async def handle_invalid_upload(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=keyboard
         )
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    # ➕ Dodawanie deadline'u
+    if context.user_data.get("awaiting_deadline"):
+        try:
+            if "-" not in text:
+                raise ValueError("Brak separatora")
+
+            task, raw_date = [s.strip() for s in text.split("-", 1)]
+
+            # Dodaj bieżący rok, jeśli nie został podany
+            parts = raw_date.split(".")
+            if len(parts) == 2:
+                raw_date = f"{parts[0]}.{parts[1]}.{datetime.today().year}"
+
+            date_obj = datetime.strptime(raw_date, "%d.%m.%Y")
+            formatted_date = date_obj.strftime("%Y-%m-%d")
+
+            add_deadline(user_id, task, formatted_date)
+
+            await update.message.reply_text(
+                f"✅ Dodano do listy!\n📌 <b>{task}</b> – {date_obj.strftime('%d %B %Y')}\n\nCo chcesz zrobić teraz?",
+                reply_markup=deadline_main_menu(),
+                parse_mode="HTML"
+            )
+        except Exception:
+            await update.message.reply_text(
+                "❌ Ups! Nie udało się dodać deadline'u.\nUpewnij się, że używasz formatu `Nazwa – data` i spróbuj jeszcze raz.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Dodaj deadline", callback_data="add_deadline")],
+                    [InlineKeyboardButton("<< Wstecz", callback_data="deadline")]
+                ]),
+                parse_mode="Markdown"
+            )
+        finally:
+            context.user_data["awaiting_deadline"] = False
+        return
+
+    # ✏️ Edycja / usuwanie – wybór numeru
+    if "deadline_action" in context.user_data:
+        action = context.user_data["deadline_action"]
+        if not text.isdigit():
+            await update.message.reply_text("❗ Wpisz poprawny numer zadania.")
+            return
+
+        index = int(text) - 1
+        selected = get_deadline_by_index(user_id, index)
+
+        if not selected:
+            await update.message.reply_text("❌ Nie znaleziono zadania o tym numerze.")
+            return
+
+        task_id, task, date = selected
+        context.user_data["selected_deadline_id"] = task_id
+
+        if action == "delete":
+            delete_deadline(user_id, task_id)
+            await update.message.reply_text("🗑️ Deadline usunięty!", reply_markup=deadline_main_menu())
+        else:  # edit
+            context.user_data["editing"] = True
+            await update.message.reply_text("✏️ Wyślij nową treść i datę w formacie:\n\nNowy opis – 25.05 lub 25.05.2025")
+
+        del context.user_data["deadline_action"]
+        return
+
+    # ✏️ Edycja konkretnego terminu – nowa treść
+    if context.user_data.get("editing"):
+        if "-" not in text:
+            await update.message.reply_text("❗ Użyj formatu `Nowy opis – data`.")
+            return
+
+        task_text, raw_date = [s.strip() for s in text.split("-", 1)]
+
+        # Dodaj bieżący rok, jeśli brak
+        parts = raw_date.split(".")
+        if len(parts) == 2:
+            raw_date = f"{parts[0]}.{parts[1]}.{datetime.today().year}"
+
+        try:
+            date_obj = datetime.strptime(raw_date, "%d.%m.%Y")
+            formatted_date = date_obj.strftime("%Y-%m-%d")
+        except:
+            await update.message.reply_text("❗ Niepoprawna data. Użyj formatu `25.05` lub `25.05.2025`.")
+            return
+
+        update_deadline(user_id, context.user_data["selected_deadline_id"], task_text, formatted_date)
+        await update.message.reply_text("✅ Deadline zaktualizowany!", reply_markup=deadline_main_menu())
+
+        del context.user_data["editing"]
+        del context.user_data["selected_deadline_id"]
+        return
+
+
 if __name__ == '__main__':
     init_db()
     app = ApplicationBuilder() \
         .token(BOT_TOKEN) \
         .request(HTTPXRequest(read_timeout=20)) \
         .build()
+    create_deadline_table()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(CommandHandler("status", status))
@@ -613,7 +832,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("kod", code))
     app.add_handler(CommandHandler("szukaj", szukaj))
     app.add_handler(CommandHandler("wyloguj", wyloguj))
-
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.PDF, handle_note_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))  # ⬅️ поднимаем выше
     app.add_handler(MessageHandler(filters.Document.ALL | filters.TEXT, handle_invalid_upload))

@@ -1,4 +1,5 @@
 import psycopg2
+import sqlite3
 from datetime import datetime
 
 
@@ -136,3 +137,17 @@ def logged_out(telegram_id):
     conn.commit()
     cur.close()
     conn.close()
+
+DB_PATH = "neondb"
+
+def execute_query(query: str, params: tuple = ()):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        conn.commit()
+
+def fetch_all(query: str, params: tuple = ()):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchall()
