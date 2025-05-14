@@ -58,7 +58,7 @@ def get_deadline_by_index(user_id: int, index: int):
         return deadlines[index]  # (id, task, date)
     return None
 
-def format_deadline_list(deadlines):
+def format_deadline_list(deadlines, with_instruction: bool = False):
     if not deadlines:
         return "📭 Nie masz jeszcze żadnych terminów."
     result = "📋 Twoje nadchodzące terminy:\n"
@@ -68,7 +68,8 @@ def format_deadline_list(deadlines):
         except ValueError:
             formatted_date = date
         result += f"{i}. {task} – {formatted_date}\n"
-
+    if with_instruction:
+        result += "\n✏️ Wpisz numer, aby edytować lub usunąć."
     return result
 
 def deadline_main_menu():

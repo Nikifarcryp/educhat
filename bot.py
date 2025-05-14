@@ -281,7 +281,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             context.user_data["deadline_action"] = "edit"
             await query.edit_message_text(
-                format_deadline_list(deadlines),
+                format_deadline_list(deadlines, with_instruction=True),
                 reply_markup=deadline_main_menu()
             )
 
@@ -296,7 +296,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             context.user_data["deadline_action"] = "delete"
             await query.edit_message_text(
-                format_deadline_list(deadlines),
+                format_deadline_list(deadlines, with_instruction=True),
                 reply_markup=deadline_main_menu()
             )
 
