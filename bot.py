@@ -20,6 +20,17 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 
+from database import init_workspace_db
+init_workspace_db()
+from database import save_link
+from database import get_user_links
+from database import delete_link
+plik_states = {}  # user_id -> file_id
+
+from database import create_files_table
+create_files_table()
+
+
 from mail_sender import wyslij_maila
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -205,14 +216,325 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     elif query.data == "przestrzen_robocza":
+        keyboard = [
+            [
+                InlineKeyboardButton("📎 Linki", callback_data="workspace_links"),
+                InlineKeyboardButton("📁 Pliki", callback_data="workspace_files")
+            ],
+            [
+                InlineKeyboardButton("🔙 Wróć", callback_data="menu_glowne")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            text="📂 Wybierz czym chcesz pracować?",
+            reply_markup=reply_markup
+        )
+
+    # ← вот здесь без отступа
+    elif query.data == "workspace_links":
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Dodaj link", callback_data="dodaj_link"),
+                InlineKeyboardButton("👁 Zobacz linki", callback_data="zobacz_linki")
+            ],
+            [
+                InlineKeyboardButton("❌ Usuń link", callback_data="usun_link"),
+                InlineKeyboardButton("🔙 Wróć", callback_data="przestrzen_robocza")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            text="🔗 Co chcesz zrobić z linkami?",
+            reply_markup=reply_markup
+        )
+
+    elif query.data == "dodaj_link":
+        context.user_data["dodaj_link"] = True  # флаг: ждём линк
+
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
         ])
 
         await query.edit_message_text(
-            text="📂 Funkcja 'Przestrzeń robocza' w budowie... 🛠️",
+            text="📎 Super! Wklej link, który chcesz zapisać w swojej przestrzeni roboczej.",
             reply_markup=keyboard
         )
+
+    elif query.data == "dodaj_notatke_do_linku":
+        context.user_data["czekam_na_notatke"] = True
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+        ])
+
+        await query.edit_message_text(
+            text="📝 Wpisz notatkę, którą chcesz dodać do linku:",
+            reply_markup=keyboard
+        )
+    elif query.data == "zapisz_link_bez_notatki":
+        link = context.user_data.get("nowy_link")
+        user_id = query.from_user.id
+
+        from database import save_link
+        save_link(user_id, link, notatka=None)
+        context.user_data.clear()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="dodaj_link"),
+             InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+        ])
+
+        await query.edit_message_text(
+            text=f"✅ Link zapisany!\n\n🔗 Link: {link}\n📝 Notatka: brak",
+            reply_markup=keyboard
+        )
+
+    elif query.data == "usun_link":
+        from database import get_user_links
+        user_id = query.from_user.id
+        links = get_user_links(user_id)
+
+        if not links:
+            await query.edit_message_text(
+                text="📭 Nie masz jeszcze żadnych zapisanych linków do usunięcia.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+                ])
+            )
+            return
+
+        # сохраняем ссылки во временное хранилище
+        context.user_data["usun_links"] = links
+        context.user_data["usun_etap"] = "czekam_na_numer"
+
+        # 1 сообщение — список
+        text = "🧾 *Twoje zapisane linki:*\n\n"
+        for i, (id, link, notatka) in enumerate(links, start=1):
+            text += f"*{i}. Link:* {link}\n"
+            if notatka:
+                text += f"📝 *Notatka:* {notatka}\n"
+            text += "\n"
+
+        await query.message.reply_text(text.strip(), parse_mode="Markdown")
+
+        # 2 сообщение — просьба о номере
+        await query.message.reply_text(
+            text="✏️ *Napisz numer linku, który chcesz usunąć:*",
+            parse_mode="Markdown"
+        )
+    elif query.data == "potwierdz_usun_link":
+        from database import delete_link
+
+        link_id = context.user_data.get("usun_wybrany")
+        delete_link(link_id)
+
+        context.user_data.pop("usun_etap", None)
+        context.user_data.pop("usun_links", None)
+        context.user_data.pop("usun_wybrany", None)
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🗑 Usuń kolejny", callback_data="usun_link")],
+            [InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+        ])
+
+        await query.edit_message_text(
+            text="✅ Link został usunięty z Twojej przestrzeni roboczej.",
+            reply_markup=keyboard
+        )
+    elif query.data == "anuluj_usuwanie":
+        context.user_data.pop("usun_etap", None)
+        context.user_data.pop("usun_links", None)
+        context.user_data.pop("usun_wybrany", None)
+
+        await query.edit_message_text(
+            text="❎ Usuwanie anulowane.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+            ])
+        )
+    elif query.data == "zobacz_linki":
+        from database import get_user_links  # ← вот эта строчка нужна
+
+        user_id = query.from_user.id
+        links = get_user_links(user_id)
+
+        if not links:
+            await query.edit_message_text(
+                text="📭 Nie masz jeszcze żadnych zapisanych linków.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Dodaj link", callback_data="dodaj_link")],
+                    [InlineKeyboardButton("📂 Wróć", callback_data="workspace_links")]
+                ])
+            )
+            return
+
+        text = "📑 *Oto Twoje zapisane linki:*\n\n"
+        for i, (id, link, notatka) in enumerate(links, start=1):
+            text += f"*{i}. Link:* {link}\n"
+            if notatka:
+                text += f"📝 *Notatka:* {notatka}\n"
+            else:
+                text += f"📝 *Notatka:* brak\n"
+            text += "\n"
+
+        await query.edit_message_text(
+            text=text.strip(),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📂 Wróć", callback_data="workspace_links")]
+            ])
+        )
+    elif query.data == "workspace_files":
+        await query.edit_message_text(
+            text="📁Co chcesz zrobić z plikami?",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Dodaj plik", callback_data="dodaj_plik"),
+                 InlineKeyboardButton("👁 Zobacz pliki", callback_data="zobacz_pliki")],
+                [InlineKeyboardButton("❌ Usuń plik", callback_data="usun_plik"),
+                 InlineKeyboardButton("🔙 Wróć", callback_data="przestrzen_robocza")]
+            ])
+        )
+
+
+    elif query.data == "zobacz_pliki":
+        from database import get_user_notes
+
+        user_id = query.from_user.id
+        notes = get_user_notes(user_id)
+
+        if not notes:
+            await query.edit_message_text(
+                text="📭 Nie masz jeszcze żadnych zapisanych plików.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Dodaj plik", callback_data="dodaj_plik")],
+                    [InlineKeyboardButton("📂 Wróć", callback_data="workspace_files")]
+                ])
+            )
+            return
+
+        for note in notes:
+            note_id, file_id, podpis = note
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📂 Wróć", callback_data="workspace_files")]
+            ])
+
+            if file_id.startswith("AgAC"):  # jeśli zdjęcie
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=file_id,
+                    caption=f"📝 {podpis}",
+
+                )
+            else:  # jeśli dokument lub inny plik
+                await context.bot.send_document(
+                    chat_id=user_id,
+                    document=file_id,
+                    caption=f"📝 {podpis}",
+
+                )
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="📁 To wszystkie Twoje pliki.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📂 Wróć", callback_data="workspace_files")]
+            ])
+        )
+
+
+    elif query.data == "usun_plik":
+        from database import get_user_notes
+
+        user_id = query.from_user.id
+        notes = get_user_notes(user_id)
+
+        if not notes:
+            await query.edit_message_text(
+                text="📭 Nie masz jeszcze żadnych plików do usunięcia.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📂 Wróć", callback_data="workspace_files")]
+                ])
+            )
+            return
+
+        context.user_data["usun_plik_lista"] = notes
+        context.user_data["usun_plik_etap"] = "czekam_na_numer"
+
+        text = "🧾 *Twoje pliki:*\n\n"
+        for i, (note_id, file_id, podpis) in enumerate(notes, start=1):
+            text += f"{i}. 📝 {podpis}\n"
+
+        await context.bot.send_message(query.from_user.id, text=text, parse_mode="Markdown")
+        await context.bot.send_message(query.from_user.id, text="✏️ Wpisz numer pliku, który chcesz usunąć:")
+
+
+    elif query.data == "potwierdz_usun_plik":
+        from database import delete_file
+        file_id = context.user_data.get("usun_plik_wybrany")
+        delete_file(file_id)
+
+        context.user_data.pop("usun_plik_lista", None)
+        context.user_data.pop("usun_plik_wybrany", None)
+        context.user_data.pop("usun_plik_etap", None)
+
+        await query.edit_message_text("✅ Plik został usunięty.",
+                reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Wróć do menu", callback_data="workspace_files")]
+            ]))
+
+
+    elif query.data == "dodaj_plik":
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="📤 Wklej plik, który chcesz zapisać w przestrzeni roboczej.\n\n(Pamiętaj: zdjęcia *tylko jako plik*)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data["plik_state"] = "awaiting_file"
+
+    elif query.data == "plik_dodaj_notatke":
+        await query.message.reply_text(
+            "✍️ Wpisz notatkę do pliku:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data["state"] = "awaiting_file_note"
+
+    elif query.data == "plik_bez_notatki":
+        from database import save_file
+        user_id = query.from_user.id
+        file_id = plik_states.pop(user_id, None)
+        if file_id:
+            save_file(user_id, file_id, "")
+            await query.message.reply_text(
+                f"📂 Plik został zapisany:\nPlik: `{file_id}`\nNotatka: brak",
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
+                    [InlineKeyboardButton("🏠 Wróć do menu", callback_data="main_menu")]
+                ])
+            )
+        context.user_data["state"] = None
+    elif query.data == "plik_dodaj_notatke":
+        await query.message.reply_text(
+            "✍️ Wpisz notatkę do pliku:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data["state"] = "awaiting_file_note"
+
+
+
+
+
+
+
+
 
 
 
@@ -228,8 +550,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("Terminy", callback_data="deadline"),
-             InlineKeyboardButton("Notatki", callback_data="notatki")],
-            [InlineKeyboardButton("Literatura", callback_data="literatura"),
+            InlineKeyboardButton("Literatura", callback_data="literatura"),
              InlineKeyboardButton("Lista funkcji", callback_data="lista_funkcji")],
             [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne"),
              InlineKeyboardButton("Dalej >>", callback_data="dalej2")]
@@ -300,160 +621,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=deadline_main_menu()
             )
 
-    elif query.data == "notatki":
-
-        keyboard = [
-            [InlineKeyboardButton("📖 Moje notatki", callback_data="moje_notatki"),
-             InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
-            [InlineKeyboardButton("<< Wstecz", callback_data="dalej"),
-             InlineKeyboardButton("🧠 AI-notatki", callback_data="przepisnotatki")]
-        ]
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_text(
-            text="🗂️ Notatki – wybierz opcję:",
-            reply_markup=reply_markup
-
-        )
-    elif query.data == "dodaj_notatke":
-        context.user_data.clear()
-        context.user_data["dodaj_notatke"] = True
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Anuluj i wróć do notatek", callback_data="anuluj_dodawanie")]
-        ])
-
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
-            text="**📎 Prześlij zdjęcie *lub plik PDF* swojej notatki jako wiadomość.**\n\n*Jeśli nie chcesz, kliknij przycisk anulowania poniżej 👇*",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
-
-
-    elif query.data == "anuluj_dodawanie":
-        context.user_data.clear()
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📖 Moje notatki", callback_data="moje_notatki"),
-             InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
-            [InlineKeyboardButton("<< Wstecz", callback_data="dalej"),
-             InlineKeyboardButton("🔄 Na PDF", callback_data="konwertuj_pdf")]
-        ])
-
-        await query.edit_message_text(
-            text="📂 Notatki – wybierz opcję:",
-            reply_markup=keyboard
-        )
-
-
-
-    elif query.data == "moje_notatki":
-
-        user_id = query.from_user.id
-        notes = get_user_notes(user_id)
-
-        if not notes:
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Dodaj notatkę", callback_data="dodaj_notatke")],
-                [InlineKeyboardButton("<<Wstecz", callback_data="notatki")]
-            ])
-
-            await query.edit_message_text(
-                text="📭 Nie masz jeszcze żadnych notatek.\n\nChcesz dodać swoją pierwszą?",
-                reply_markup=keyboard
-            )
-            return
-
-        for note in notes:
-            note_id, file_id, podpis = note
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🗑 Usuń", callback_data=f"usun_{note_id}")]
-            ])
-
-            if file_id.startswith("AgAC"):  # Telegram photo file_id usually starts like this
-                await context.bot.send_photo(
-                    chat_id=user_id,
-                    photo=file_id,
-                    caption=f"📝 {podpis}",
-                    reply_markup=keyboard
-                )
-            else:
-                await context.bot.send_document(
-                    chat_id=user_id,
-                    document=file_id,
-                    caption=f"📝 {podpis}",
-                    reply_markup=keyboard
-                )
-
-        # 🔽 После цикла — кнопка вернуться в меню
-        keyboard_back = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
-        ])
-
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="📁 To wszystkie Twoje notatki.",
-            reply_markup=keyboard_back
-        )
-
-
-    elif query.data.startswith("usun_"):
-        note_id = int(query.data.split("_")[1])
-        podpis = get_note_signature(note_id)
-
-        if not podpis:
-            await context.bot.send_message(
-                chat_id=query.from_user.id,
-                text="⚠️ Nie znaleziono notatki."
-            )
-            return
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Tak", callback_data=f"potwierdz_usun_{note_id}"),
-             InlineKeyboardButton("❌ Nie", callback_data="notatki")]
-        ])
-
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
-            text=f"Czy na pewno chcesz usunąć notatkę:\n\n„{podpis}”?",
-            reply_markup=keyboard
-        )
-
-
-    elif query.data.startswith("potwierdz_usun_"):
-        note_id = int(query.data.split("_")[2])
-        podpis = get_note_signature(note_id)
-        delete_note(note_id)
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
-        ])
-
-        await query.edit_message_text(
-            text=f"🗑 Notatka „{podpis}” została usunięta.",
-            reply_markup=keyboard
-        )
-
-    elif query.data == "przepisnotatki":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📂 Wróć do menu notatek", callback_data="notatki")]
-        ])
-
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
-            text=(
-                "🧠 *Zamień bałagan na porządek – dzięki AI!*\n\n"
-                "Masz notatki z krzywym pismem, których sam już nie możesz odczytać?\n\n"
-                "To narzędzie odczytuje Twoją notatkę i tworzy z niej czytelny, uporządkowany dokument – gotowy do nauki, PDF-a lub druku.\n\n"
-                "👉 [Kliknij tutaj](https://www.revisely.com/quiz-generator)\n\n"
-                "Działa w ponad 50 językach – w tym po polsku 🇵🇱"
-            ),
-            parse_mode="Markdown",
-            reply_markup = keyboard
-        )
-
 
     elif query.data == "literatura":
         keyboard = InlineKeyboardMarkup([
@@ -521,47 +688,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
-async def handle_note_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("dodaj_notatke"):
-        file_id = None
-
-        # Фото
-        if update.message.photo:
-            photo = update.message.photo[-1]
-            file_id = photo.file_id
-
-        # PDF-документ
-        elif update.message.document:
-            document = update.message.document
-            if document.mime_type == 'application/pdf':
-                file_id = document.file_id
-            else:
-                await update.message.reply_text("❌ Niewłaściwy format pliku. Możesz przesłać tylko zdjęcie lub plik PDF.")
-                return
-
-        # Ничего не отправил или странный тип файла
-        else:
-            await update.message.reply_text("❌ Musisz przesłać zdjęcie lub plik PDF. Inne formaty nie są obsługiwane.")
-            return
-
-        # Успешная обработка
-        context.user_data["nowa_notatka_file_id"] = file_id
-        context.user_data["dodaj_notatke"] = False
-        context.user_data["czekam_na_podpis"] = True
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Anuluj i wróć do notatek", callback_data="anuluj_dodawanie")]
-        ])
-
-        await update.message.reply_text(
-            "**✍️ Wpisz podpis do tej notatki.**\n\n*Jeśli nie chcesz, kliknij przycisk anulowania poniżej 👇*",
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
-
-
-
-
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("czekam_na_podpis"):
@@ -581,6 +707,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Notatka została zapisana!\n\nCo teraz?",
             reply_markup=keyboard
         )
+
+        # === DODAWANIE LINKU ===
+        if context.user_data.get("dodaj_link"):
+            link = update.message.text.strip()
+
+            context.user_data["nowy_link"] = link
+            context.user_data["dodaj_link"] = False
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Tak", callback_data="dodaj_notatke_do_linku"),
+                 InlineKeyboardButton("❌ Nie", callback_data="zapisz_link_bez_notatki")],
+                [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+            ])
+
+            await update.message.reply_text(
+                text=f"📝 Czy chcesz dodać notatkę do tego linku?\n\n🔗 {link}",
+                reply_markup=keyboard
+            )
+            return
+
 
 async def clean_send(update_or_query, context, text, reply_markup=None, photo=None):
     chat_id = update_or_query.effective_chat.id if hasattr(update_or_query, 'effective_chat') else update_or_query.message.chat.id
@@ -726,6 +872,113 @@ async def handle_invalid_upload(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
+    # 📎 Dodawanie linku (obsługuje tylko wklejony link)
+    if context.user_data.get("dodaj_link"):
+        import re
+        link = text
+        link_pattern = re.compile(r'(https?://)?([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(/.*)?')
+
+        if not link_pattern.fullmatch(link):
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+            ])
+            await update.message.reply_text(
+                text="❗ To nie wygląda jak prawidłowy link.\n\n🧠 Sprawdź pisownię lub upewnij się, że to naprawdę adres strony (np. google.com)",
+                reply_markup=keyboard
+            )
+            return
+
+        context.user_data["nowy_link"] = link
+        context.user_data["dodaj_link"] = False
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Tak", callback_data="dodaj_notatke_do_linku"),
+             InlineKeyboardButton("❌ Nie", callback_data="zapisz_link_bez_notatki")],
+            [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+        ])
+
+        await update.message.reply_text(
+            text=f"📝 Czy chcesz dodać notatkę do tego linku?\n\n🔗 {link}",
+            reply_markup=keyboard
+        )
+        return
+
+    # 🔥 ДОДАНО: obsługa notatki do pliku
+    if context.user_data.get("plik_state") == "czekaj_na_notatke":
+        podpis = text
+        file_id = context.user_data.get("plik_file_id")
+
+        if not file_id:
+            await update.message.reply_text("❌ Nie znaleziono pliku. Spróbuj jeszcze raz.")
+            return
+
+        from database import save_file
+        save_file(user_id, file_id, podpis)
+
+        await update.message.reply_text(
+            f"✅ Plik został zapisany!\n📎 Plik ID: `{file_id}`\n📝 Notatka: {podpis}",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
+                [InlineKeyboardButton("🏠 Wróć do menu", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data.pop("plik_state", None)
+        context.user_data.pop("plik_file_id", None)
+
+    elif context.user_data.get("usun_etap") == "czekam_na_numer":
+        numer = update.message.text.strip()
+
+        if not numer.isdigit():
+            await update.message.reply_text("⚠️ Wpisz tylko numer linku (np. 1, 2, 3...)")
+            return
+
+        index = int(numer) - 1
+        links = context.user_data.get("usun_links", [])
+        if index < 0 or index >= len(links):
+            await update.message.reply_text("❌ Nie ma linku o takim numerze.")
+            return
+
+        # znaleziono link
+        link_id, link, notatka = links[index]
+        context.user_data["usun_wybrany"] = link_id
+        context.user_data["usun_etap"] = "potwierdz_usuniecie"
+
+        text = f"🔐 *Czy na pewno chcesz usunąć ten link?*\n\n🔗 {link}"
+        if notatka:
+            text += f"\n📝 {notatka}"
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Tak", callback_data="potwierdz_usun_link")],
+            [InlineKeyboardButton("❌ Anuluj", callback_data="anuluj_usuwanie")]
+        ])
+
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        return
+
+
+    # 🔽 Poniżej — pozostałe rzeczy, które już były
+    # ✏️ Dodawanie notatki do linku
+    if context.user_data.get("czekam_na_notatke"):
+        notatka = text
+        link = context.user_data.get("nowy_link")
+        user_id = update.effective_user.id
+
+        from database import save_link
+        save_link(user_id, link, notatka)
+
+        context.user_data.clear()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="dodaj_link")],
+            [InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+        ])
+
+        await update.message.reply_text(
+            text=f"✅ Link zapisany!\n\n🔗 Link: {link}\n📝 Notatka: {notatka}",
+            reply_markup=keyboard
+        )
+        return
 
     # ➕ Dodawanie deadline'u
     if context.user_data.get("awaiting_deadline"):
@@ -817,6 +1070,180 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del context.user_data["selected_deadline_id"]
         return
 
+    if context.user_data.get("usun_plik_etap") == "czekam_na_numer":
+        numer = text.strip()
+        if not numer.isdigit():
+            await update.message.reply_text("❌ Wpisz numer jako liczbę (np. 1, 2, 3...)")
+            return
+
+        index = int(numer) - 1
+        pliki = context.user_data.get("usun_plik_lista", [])
+        if index < 0 or index >= len(pliki):
+            await update.message.reply_text("❌ Nie ma pliku o takim numerze.")
+            return
+
+        file_id, telegram_file_id, podpis = pliki[index]
+        context.user_data["usun_plik_wybrany"] = file_id
+        context.user_data["usun_plik_etap"] = "potwierdz"
+
+        await update.message.reply_text(
+            f"🔐 Czy na pewno chcesz usunąć ten plik?\n\n📝 {podpis}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Tak", callback_data="potwierdz_usun_plik")],
+                [InlineKeyboardButton("❌ Nie", callback_data="workspace_files")]
+            ])
+        )
+        return
+
+
+async def handle_workspace_link_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not (context.user_data.get("dodaj_link") or context.user_data.get("czekam_na_notatke")):
+        return
+    if context.user_data.get("dodaj_link"):
+        link = update.message.text.strip()
+
+        # мягкая проверка на ссылку
+        import re
+        link_pattern = re.compile(r'(https?://)?([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}(/.*)?')
+
+        if not link_pattern.fullmatch(link):
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+            ])
+            await update.message.reply_text(
+                text="❗ To nie wygląda jak prawidłowy link.\n\n🧠 Sprawdź pisownię lub upewnij się, że to naprawdę adres strony (np. google.com)",
+                reply_markup=keyboard
+            )
+            return
+
+        context.user_data["nowy_link"] = link
+        context.user_data["dodaj_link"] = False
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Tak", callback_data="dodaj_notatke_do_linku"),
+             InlineKeyboardButton("❌ Nie", callback_data="zapisz_link_bez_notatki")],
+            [InlineKeyboardButton("🔙 Wstecz", callback_data="workspace_links")]
+        ])
+
+        await update.message.reply_text(
+            text=f"📝 Czy chcesz dodać notatkę do tego linku?\n\n🔗 {link}",
+            reply_markup=keyboard
+        )
+        return
+
+
+    elif context.user_data.get("czekam_na_notatke"):
+        notatka = update.message.text.strip()
+        link = context.user_data.get("nowy_link")
+        user_id = update.effective_user.id
+
+        from database import save_link  # ← если ещё не импортировал
+        save_link(user_id, link, notatka)
+        context.user_data.clear()
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="dodaj_link"),
+             InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_links")]
+        ])
+
+        await update.message.reply_text(
+            text=f"✅ Link zapisany!\n\n🔗 Link: {link}\n📝 Notatka: {notatka}",
+            reply_markup=keyboard
+        )
+        return
+
+
+async def plik_dodaj_notatke(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["plik_state"] = "czekaj_na_notatke"
+    await query.edit_message_text(
+        "✏️ Wpisz notatkę do pliku.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+        ])
+    )
+
+async def handle_file_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("plik_state") == "czekaj_na_notatke":
+        podpis = update.message.text
+        file_id = context.user_data.get("plik_file_id")
+        user_id = update.effective_user.id
+
+        if not file_id:
+            await update.message.reply_text("❌ Nie znaleziono pliku. Spróbuj jeszcze raz.")
+            return
+
+        from database import save_file
+        save_file(user_id, file_id, podpis)
+
+        await update.message.reply_text(
+            f"✅ Plik został zapisany!\n📎 Plik ID: `{file_id}`\n📝 Notatka: {podpis}",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
+                [InlineKeyboardButton("🏠 Wróć do menu", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data.pop("plik_state", None)
+        context.user_data.pop("plik_file_id", None)
+        return  # ← ОБЯЗАТЕЛЬНО
+
+
+
+
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("plik_state") != "awaiting_file":
+        return
+
+    document = update.message.document or update.message.video or update.message.audio
+    if not document:
+        await update.message.reply_text("❌ To nie jest plik. Wyślij plik jako *plik*, nie zdjęcie.", parse_mode="Markdown")
+        return
+
+    file_id = document.file_id
+    user_id = update.effective_user.id
+
+    context.user_data["plik_file_id"] = file_id
+    context.user_data["plik_state"] = "czekaj_na_notatke"
+
+    await update.message.reply_text(
+        "📝 Chcesz dodać notatkę do tego pliku?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🟢 Tak", callback_data="plik_dodaj_notatke"),
+             InlineKeyboardButton("🔴 Nie", callback_data="plik_bez_notatki")],
+            [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+        ])
+    )
+
+async def handle_file_note_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    file_id = context.user_data.get("plik_file_id")
+
+    if query.data == "plik_dodaj_notatke":
+        context.user_data["plik_state"] = "awaiting_note"
+        await query.message.reply_text(
+            "✍️ Wpisz notatkę do tego pliku:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
+            ])
+        )
+    elif query.data == "plik_bez_notatki":
+        save_file(user_id, file_id, "")  # без подписи
+        await query.message.reply_text(
+            f"✅ Plik został zapisany!\n📎 Plik ID: `{file_id}`\n📝 Notatka: brak",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
+                [InlineKeyboardButton("🏠 Wróć do menu", callback_data="workspace_files")]
+            ])
+        )
+        context.user_data.pop("plik_state", None)
+        context.user_data.pop("plik_file_id", None)
+
 
 if __name__ == '__main__':
     init_db()
@@ -825,6 +1252,7 @@ if __name__ == '__main__':
         .request(HTTPXRequest(read_timeout=20)) \
         .build()
     create_deadline_table()
+    create_files_table()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(CommandHandler("status", status))
@@ -833,8 +1261,9 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("szukaj", szukaj))
     app.add_handler(CommandHandler("wyloguj", wyloguj))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.PDF, handle_note_upload))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))  # ⬅️ поднимаем выше
+    app.add_handler(MessageHandler(filters.ATTACHMENT & ~filters.PHOTO, handle_file))
+    app.add_handler(CallbackQueryHandler(handle_file_note_decision, pattern="^plik_dodaj_notatke|plik_bez_notatki$"))
+
     app.add_handler(MessageHandler(filters.Document.ALL | filters.TEXT, handle_invalid_upload))
 
     app.run_polling()

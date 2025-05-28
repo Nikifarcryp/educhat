@@ -29,6 +29,37 @@ def create_table_notatki():
     cur.close()
     conn.close()
 
+def create_table_linki():
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS linki (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            link TEXT,
+            notatka TEXT,
+            data_dodania TEXT
+        )
+    ''')
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def create_files_table():
+    conn = sqlite3.connect("workspace.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            file_id TEXT,
+            notatka TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     conn = connect()
     cur = conn.cursor()
@@ -45,6 +76,68 @@ def init_db():
     conn.close()
 
     create_table_notatki()
+
+def init_workspace_db():
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS linki (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            link TEXT,
+            notatka TEXT,
+            data_dodania TEXT
+        )
+    ''')
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def save_link(user_id, link, notatka=None):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('''
+        INSERT INTO linki (user_id, link, notatka, data_dodania)
+        VALUES (%s, %s, %s, %s)
+    ''', (user_id, link, notatka, datetime.now().isoformat()))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def get_user_links(user_id):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT id, link, notatka FROM linki
+        WHERE user_id = %s
+        ORDER BY data_dodania DESC
+    ''', (user_id,))
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+    return results
+
+def save_file(user_id, file_id, podpis):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute('''
+        INSERT INTO notatki (user_id, file_id, podpis, data_dodania)
+        VALUES (%s, %s, %s, %s)
+    ''', (user_id, file_id, podpis, datetime.now().isoformat()))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+
+def delete_link(link_id):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM linki WHERE id = %s", (link_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 def save_note(user_id, file_id, podpis):
     conn = connect()
@@ -69,6 +162,15 @@ def get_user_notes(user_id):
     cur.close()
     conn.close()
     return notes
+
+def delete_file(file_id):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM notatki WHERE id = %s", (file_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 def delete_note(note_id):
     conn = connect()
@@ -151,3 +253,13 @@ def fetch_all(query: str, params: tuple = ()):
         cursor = conn.cursor()
         cursor.execute(query, params)
         return cursor.fetchall()
+
+
+def get_user_files(user_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, file_id, notatka FROM files WHERE user_id = ?", (user_id,))
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
