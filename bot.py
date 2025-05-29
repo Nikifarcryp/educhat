@@ -30,7 +30,7 @@ plik_states = {}  # user_id -> file_id
 from database import create_files_table
 create_files_table()
 
-
+from literatura import komenda_literatura
 from mail_sender import wyslij_maila
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -623,11 +623,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     elif query.data == "literatura":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
-        ])
-        await query.edit_message_text("📚 Funkcja 'Literatura' w budowie... 🛠️",
-        reply_markup=keyboard)
+        await query.edit_message_text(
+            "📚 Witaj w sekcji Literatury!\n\nAby znaleźć książkę, użyj komendy:\n`/literatura słowo_kluczowe`\n\nPrzykład:\n`/literatura sztuczna inteligencja`",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("<< Wróć", callback_data="menu_glowne")]
+            ])
+        )
+
 
     elif query.data == "lista_funkcji":
         keyboard = InlineKeyboardMarkup([
@@ -1263,6 +1266,8 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.ATTACHMENT & ~filters.PHOTO, handle_file))
     app.add_handler(CallbackQueryHandler(handle_file_note_decision, pattern="^plik_dodaj_notatke|plik_bez_notatki$"))
+
+    app.add_handler(CommandHandler("literatura", komenda_literatura))
 
     app.add_handler(MessageHandler(filters.Document.ALL | filters.TEXT, handle_invalid_upload))
 
