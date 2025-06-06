@@ -72,7 +72,7 @@ def get_plan_for_day(date: datetime) -> (str, InlineKeyboardMarkup):
 
     plan_list = PLAN_C371.get(polish_day, {}).get(week_type, [])
     if not plan_list:
-        return f"Brak zajęć na: {polish_day.capitalize()}", InlineKeyboardMarkup([[InlineKeyboardButton("<< Wstecz", callback_data="plan_zajec")]])
+        return f"😄 Brak zajęć na: {polish_day.capitalize()}", InlineKeyboardMarkup([[InlineKeyboardButton("<< Wstecz", callback_data="plan_zajec")]])
 
     formatted = f"✅ Świetnie, teraz możesz zobaczyć plan zajęć na {polish_day}, {date.strftime('%A %d.%m.%y')}\n"
     for entry in plan_list:

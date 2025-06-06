@@ -10,6 +10,7 @@ from plan_zajec_c371 import get_plan_for_day, get_week_plan_text, get_week_plan_
 from database import save_note
 from telegram.ext import MessageHandler, filters
 from telegram.request import HTTPXRequest
+from asystent_ai import ask_assistant
 from deadline_tracker import (
     create_deadline_table, add_deadline, get_deadlines,
     delete_deadline, update_deadline, format_deadline_list,
@@ -48,10 +49,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if is_logged_in(user_id):
         keyboard = [
-            [InlineKeyboardButton("Plan zajęć", callback_data="plan_zajec"),
-             InlineKeyboardButton("Aktualności", callback_data="aktualnosci")],
-            [InlineKeyboardButton("Przestrzeń robocza", callback_data="przestrzen_robocza"),
-             InlineKeyboardButton("Asystent AI", callback_data="asystent_ai")],
+            [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
+             InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
+            [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
+             InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
             [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -77,8 +78,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👇",
             reply_markup=reply_markup_inline
         )
-
-
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -174,8 +173,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "menu_glowne":
         keyboard = [
-            [InlineKeyboardButton("Plan zajęć", callback_data="plan_zajec"), InlineKeyboardButton("Aktualności", callback_data="aktualnosci")],
-            [InlineKeyboardButton("Przestrzeń robocza", callback_data="przestrzen_robocza"), InlineKeyboardButton("Asystent AI", callback_data="asystent_ai")],
+            [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
+             InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
+            [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
+             InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
             [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -479,10 +480,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("usun_plik_wybrany", None)
         context.user_data.pop("usun_plik_etap", None)
 
-        await query.edit_message_text("✅ Plik został usunięty.",
-                reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏠 Wróć do menu", callback_data="workspace_files")]
-            ]))
+        await query.edit_message_text(
+            "✅ Plik został usunięty z Twojej przestrzeni roboczej.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗑 Usuń kolejny", callback_data="usun_plik")],
+                [InlineKeyboardButton("📂 Wróć do menu", callback_data="workspace_files")]
+            ])
+        )
 
 
     elif query.data == "dodaj_plik":
@@ -495,38 +499,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["plik_state"] = "awaiting_file"
 
-    elif query.data == "plik_dodaj_notatke":
-        await query.message.reply_text(
-            "✍️ Wpisz notatkę do pliku:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
-            ])
-        )
-        context.user_data["state"] = "awaiting_file_note"
 
-    elif query.data == "plik_bez_notatki":
-        from database import save_file
-        user_id = query.from_user.id
-        file_id = plik_states.pop(user_id, None)
-        if file_id:
-            save_file(user_id, file_id, "")
-            await query.message.reply_text(
-                f"📂 Plik został zapisany:\nPlik: `{file_id}`\nNotatka: brak",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
-                    [InlineKeyboardButton("🏠 Wróć do menu", callback_data="main_menu")]
-                ])
-            )
-        context.user_data["state"] = None
-    elif query.data == "plik_dodaj_notatke":
-        await query.message.reply_text(
-            "✍️ Wpisz notatkę do pliku:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Wróć", callback_data="workspace_files")]
-            ])
-        )
-        context.user_data["state"] = "awaiting_file_note"
 
 
 
@@ -539,19 +512,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
     elif query.data == "asystent_ai":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
-        ])
-        await query.edit_message_text("🤖 Funkcja 'Asystent AI' w budowie... 🛠️",
-        reply_markup=keyboard)
+        context.user_data["ask_ai"] = True
+        await query.edit_message_text(
+            text="🤖 Zadaj pytanie Asystentowi AI – napisz je jako wiadomość:\n\nNapisz „menu” jeśli chcesz zakończyć rozmowę.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("<< Wróć", callback_data="menu_glowne")]])
+        )
 
 
     elif query.data == "dalej":
 
         keyboard = [
-            [InlineKeyboardButton("Terminy", callback_data="deadline"),
-            InlineKeyboardButton("Literatura", callback_data="literatura"),
-             InlineKeyboardButton("Lista funkcji", callback_data="lista_funkcji")],
+            [InlineKeyboardButton("⌛ Terminy", callback_data="deadline"),
+            InlineKeyboardButton("📚 Literatura", callback_data="literatura"),
+             InlineKeyboardButton("🪧 Lista funkcji", callback_data="lista_funkcji")],
             [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne"),
              InlineKeyboardButton("Dalej >>", callback_data="dalej2")]
         ]
@@ -632,22 +605,41 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+
     elif query.data == "lista_funkcji":
+
+        text = (
+
+            "📋 <b>Lista funkcji EduChat:</b>\n\n"
+            "1. 📚 <b>Plan zajęć</b>\n"
+            "   Sprawdź plan na dziś, jutro lub cały tydzień.\n Zawsze aktualny i pod ręką.\n\n"
+            "2. 📰 <b>Aktualności</b>\n"
+            "   Zobacz terminy zbliżających się wydarzeń i deadline’ów.\n Masz 5 dni do deadline? Tu się dowiesz!\n\n"
+            "3. 📂 <b>Przestrzeń robocza</b>\n"
+            "   Tutaj możesz zapisać ważne linki, pliki oraz zarządząć nimi!.\n\n"
+            "4. 🤖 <b>Asystent AI</b>\n"
+            "   Zadaj dowolne pytanie – o pogodę, naukę, IT czy... życie.\n EduChat AI zawsze odpowie.\n\n"
+            "5. 📅 <b>Terminy</b>\n"
+            "   Dodaj ważne terminy: zaliczenia, egzaminy, projekty.\n Bot przypomni Ci o wszystkim!\n\n"
+            "6. 📚 <b>Literatura</b>\n"
+            "   Tutaj w szybki sposób znajdziesz książkę posiadającą ISBN!\n"
+            " (Ta funkcja to super opcja dla studentów piszących pracę dyplomową!)\n\n"
+        )
+
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej")]
         ])
-        await query.edit_message_text("🧾 Funkcja 'Lista funkcji' w budowie... 🛠️",
-        reply_markup=keyboard)
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
 
     elif query.data == "dalej2":
 
         keyboard = [
-            [InlineKeyboardButton("Konto", callback_data="konto"),
-             InlineKeyboardButton("O nas", callback_data="o_nas")],
-            [InlineKeyboardButton("Wsparcie", callback_data="wsparcie"),
-             InlineKeyboardButton("Prywatność", callback_data="prywatnosc")],
+            [InlineKeyboardButton("🪪 Konto", callback_data="konto"),
+             InlineKeyboardButton("ℹ️ O nas", callback_data="o_nas")],
+            [InlineKeyboardButton("💁 Wsparcie", callback_data="wsparcie"),
+             InlineKeyboardButton("🔏 Prywatność", callback_data="prywatnosc")],
             [InlineKeyboardButton("<< Wstecz", callback_data="dalej")]
         ]
 
@@ -660,36 +652,71 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+
+
     elif query.data == "konto":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej2")]
         ])
-        await query.edit_message_text("👤 Funkcja 'Konto' w budowie... 🛠️",
-        reply_markup=keyboard)
+        await query.edit_message_text(
+            text=(
+                "👤 <b>Twoje konto</b>\n\n"
+                "Jesteś zalogowany jako student Uniwersytetu Szczecińskiego.\n"
+                "W przyszłości planujemy dodać tutaj więcej opcji, takich jak zmiana e-maila, ustawienia powiadomień czy personalizacja interfejsu."
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
 
     elif query.data == "o_nas":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej2")]
         ])
-        await query.edit_message_text("ℹ️ Funkcja 'O nas' w budowie... 🛠️",
-        reply_markup=keyboard
-    )
+
+        await query.edit_message_text(
+            text=(
+                "ℹ️ <b>O nas</b>\n\n"
+                "EduChat to projekt stworzony przez studentów Informatyki w Biznesie z myślą o innych studentach USZ.\n"
+                "Chcieliśmy stworzyć narzędzie, które łączy funkcjonalność z wygodą – plan zajęć, terminy, pliki, a nawet asystenta AI – wszystko w jednym miejscu!\n\n"
+                "Dziękujemy, że korzystasz z naszego bota 💙"
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
 
     elif query.data == "wsparcie":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej2")]
         ])
-        await query.edit_message_text("🤝 Funkcja 'Wsparcie' w budowie... 🛠️",
-        reply_markup=keyboard
-    )
+        await query.edit_message_text(
+            text=(
+                "🤝 <b>Wsparcie</b>\n\n"
+                "Masz pytania, pomysły lub coś nie działa tak jak trzeba?\n"
+                "Napisz do nas na adres: <i>educhat@usz.edu.pl</i>\n"
+                "Chętnie pomożemy i rozwiniemy bota o nowe funkcje 💡"
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
 
     elif query.data == "prywatnosc":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+            [InlineKeyboardButton("<< Wstecz", callback_data="dalej2")]
         ])
-        await query.edit_message_text("🔐 Funkcja 'Prywatność' w budowie... 🛠️",
-        reply_markup=keyboard
-    )
+
+        await query.edit_message_text(
+            text=(
+                "🔐 <b>Prywatność</b>\n\n"
+                "EduChat przechowuje Twoje dane lokalnie w bezpiecznej bazie danych.\n"
+                "Nie udostępniamy ich osobom trzecim i nie śledzimy Twojej aktywności.\n"
+                "Twoje pliki, notatki i terminy są dostępne tylko dla Ciebie – wszystko po to, byś czuł(a) się bezpiecznie 💙"
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -801,8 +828,10 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if confirm_code(user_id, wpisany_kod):
         # Sukces – wyświetlamy menu główne
         keyboard = [
-            [InlineKeyboardButton("Plan zajęć", callback_data="plan_zajec"), InlineKeyboardButton("Aktualności", callback_data="aktualnosci")],
-            [InlineKeyboardButton("Przestrzeń robocza", callback_data="przestrzen_robocza"), InlineKeyboardButton("Asystent AI", callback_data="asystent_ai")],
+            [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
+             InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
+            [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
+             InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
             [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -907,7 +936,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 🔥 ДОДАНО: obsługa notatki do pliku
-    if context.user_data.get("plik_state") == "czekaj_na_notatke":
+    if context.user_data.get("plik_state") == "awaiting_note":
         podpis = text
         file_id = context.user_data.get("plik_file_id")
 
@@ -919,7 +948,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_file(user_id, file_id, podpis)
 
         await update.message.reply_text(
-            f"✅ Plik został zapisany!\n📎 Plik ID: `{file_id}`\n📝 Notatka: {podpis}",
+            f"✅ Plik został zapisany!\n 📝 Notatka: {podpis}",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("➕ Dodaj kolejny", callback_data="plik_dodaj")],
@@ -1073,6 +1102,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del context.user_data["selected_deadline_id"]
         return
 
+    if context.user_data.get("ask_ai"):
+        text = update.message.text.strip().lower()
+
+        if text in ("menu", "/menu", "powrót", "koniec"):
+            context.user_data.pop("ask_ai", None)
+            await update.message.reply_text(
+                "🧭 Zakończono rozmowę z Asystentem AI.\nWróciłeś do menu głównego.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
+                     InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
+                    [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
+                     InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
+                    [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
+                ])
+            )
+            return
+
+        # Jeśli nie wpisał "menu" — odpowiedz jak zwykle
+        reply = await ask_assistant(update.message.text, os.getenv("OPENROUTER_API_KEY"))
+        await update.message.reply_text(f"🤖 {reply}")
+
     if context.user_data.get("usun_plik_etap") == "czekam_na_numer":
         numer = text.strip()
         if not numer.isdigit():
@@ -1088,6 +1138,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id, telegram_file_id, podpis = pliki[index]
         context.user_data["usun_plik_wybrany"] = file_id
         context.user_data["usun_plik_etap"] = "potwierdz"
+
 
         await update.message.reply_text(
             f"🔐 Czy na pewno chcesz usunąć ten plik?\n\n📝 {podpis}",
@@ -1159,7 +1210,7 @@ async def handle_workspace_link_text(update: Update, context: ContextTypes.DEFAU
 async def plik_dodaj_notatke(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    context.user_data["plik_state"] = "czekaj_na_notatke"
+    context.user_data["plik_state"] = "awaiting_note"
     await query.edit_message_text(
         "✏️ Wpisz notatkę do pliku.",
         reply_markup=InlineKeyboardMarkup([
@@ -1168,7 +1219,7 @@ async def plik_dodaj_notatke(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 async def handle_file_note_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("plik_state") == "czekaj_na_notatke":
+    if context.user_data.get("plik_state") == "awaiting_note":
         podpis = update.message.text
         file_id = context.user_data.get("plik_file_id")
         user_id = update.effective_user.id
@@ -1208,7 +1259,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     context.user_data["plik_file_id"] = file_id
-    context.user_data["plik_state"] = "czekaj_na_notatke"
+    context.user_data["plik_state"] = "awaiting_note"
 
     await update.message.reply_text(
         "📝 Chcesz dodać notatkę do tego pliku?",
@@ -1257,7 +1308,6 @@ if __name__ == '__main__':
     create_deadline_table()
     create_files_table()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("zaloguj", zaloguj))
     app.add_handler(CommandHandler("kod", code))
@@ -1266,6 +1316,7 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.ATTACHMENT & ~filters.PHOTO, handle_file))
     app.add_handler(CallbackQueryHandler(handle_file_note_decision, pattern="^plik_dodaj_notatke|plik_bez_notatki$"))
+    app.add_handler(CallbackQueryHandler(button))
 
     app.add_handler(CommandHandler("literatura", komenda_literatura))
 
