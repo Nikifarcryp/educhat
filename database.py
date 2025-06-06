@@ -2,6 +2,35 @@ import psycopg2
 import sqlite3
 from datetime import datetime
 
+def add_fullname_column():
+    conn = connect()
+    cur = conn.cursor()
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN fullname TEXT;")
+        conn.commit()
+    except Exception as e:
+        print("Kolumna fullname już istnieje lub wystąpił błąd:", e)
+    finally:
+        cur.close()
+        conn.close()
+
+def save_name_and_surname(user_id: int, fullname: str):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET fullname = %s WHERE telegram_id = %s", (fullname, user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def get_user_info(user_id: int):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT email, fullname FROM users WHERE telegram_id = %s", (user_id,))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    return result
+
 
 def connect():
     return psycopg2.connect(

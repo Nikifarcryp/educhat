@@ -7,7 +7,7 @@ from serpapi import GoogleSearch
 import random
 from database import *
 from plan_zajec_c371 import get_plan_for_day, get_week_plan_text, get_week_plan_image_and_caption
-from database import save_note
+from database import save_note, init_workspace_db, save_link, get_user_links, delete_link
 from telegram.ext import MessageHandler, filters
 from telegram.request import HTTPXRequest
 from asystent_ai import ask_assistant
@@ -20,12 +20,8 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
-
-from database import init_workspace_db
 init_workspace_db()
-from database import save_link
-from database import get_user_links
-from database import delete_link
+
 plik_states = {}  # user_id -> file_id
 
 from database import create_files_table
@@ -78,6 +74,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👇",
             reply_markup=reply_markup_inline
         )
+
+async def show_main_menu(update: Update):
+    keyboard = [
+        [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
+         InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
+        [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
+         InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
+        [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
+    ]
+    await update.message.reply_text(
+        "🎉 Zalogowano pomyślnie jako student USZ!\n👇 Wybierz opcję:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -277,7 +286,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         link = context.user_data.get("nowy_link")
         user_id = query.from_user.id
 
-        from database import save_link
         save_link(user_id, link, notatka=None)
         context.user_data.clear()
 
@@ -292,7 +300,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "usun_link":
-        from database import get_user_links
         user_id = query.from_user.id
         links = get_user_links(user_id)
 
@@ -325,7 +332,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
     elif query.data == "potwierdz_usun_link":
-        from database import delete_link
 
         link_id = context.user_data.get("usun_wybrany")
         delete_link(link_id)
@@ -355,7 +361,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
     elif query.data == "zobacz_linki":
-        from database import get_user_links  # ← вот эта строчка нужна
 
         user_id = query.from_user.id
         links = get_user_links(user_id)
@@ -654,19 +659,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
     elif query.data == "konto":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("<< Wstecz", callback_data="dalej2")]
-        ])
+        user_id = query.from_user.id
+        info = get_user_info(user_id)
+        email = info[0] if info and info[0] else "Nieznany"
+        fullname = info[1] if info and info[1] else "Niepodany"
+        keyboard = [
+            [InlineKeyboardButton("🚪 Wyloguj", callback_data="wyloguj")],
+            [InlineKeyboardButton("<< Wstecz", callback_data="menu_glowne")]
+        ]
+
         await query.edit_message_text(
-            text=(
-                "👤 <b>Twoje konto</b>\n\n"
-                "Jesteś zalogowany jako student Uniwersytetu Szczecińskiego.\n"
-                "W przyszłości planujemy dodać tutaj więcej opcji, takich jak zmiana e-maila, ustawienia powiadomień czy personalizacja interfejsu."
-            ),
-            reply_markup=keyboard,
-            parse_mode="HTML"
+            f" *Twoje konto:*\n\n👤 Imię i nazwisko: `{fullname}`\n📧 E-mail: `{email}`",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+    elif query.data == "wyloguj":
+        user_id = query.from_user.id
+        logged_out(user_id)
+        await query.edit_message_text("🚪 Zostałeś wylogowany.")
 
 
     elif query.data == "o_nas":
@@ -826,22 +839,15 @@ async def code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     wpisany_kod = context.args[0]
     if confirm_code(user_id, wpisany_kod):
-        # Sukces – wyświetlamy menu główne
-        keyboard = [
-            [InlineKeyboardButton("📋 Plan zajęć", callback_data="plan_zajec"),
-             InlineKeyboardButton("📰 Aktualności", callback_data="aktualnosci")],
-            [InlineKeyboardButton("📂 Przestrzeń robocza", callback_data="przestrzen_robocza"),
-             InlineKeyboardButton("🤖 Asystent AI", callback_data="asystent_ai")],
-            [InlineKeyboardButton("Dalej >>", callback_data="dalej")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            "🎉 Zalogowano pomyślnie jako student USZ!\n\nW czym mogę Ci pomóc?\n\n✅ Sprawdź plan, salę, zadaj pytanie...\n👇 Wybierz opcję lub przejdź dalej:",
-            reply_markup=reply_markup
-        )
+        user_info = get_user_info(user_id)
+        if not user_info or not user_info[1]:  # Brak imienia
+            context.user_data["czekam_na_imie"] = True
+            await update.message.reply_text("🖊️ Wpisz teraz swoje imię i nazwisko:")
+            return
+        await show_main_menu(update)
     else:
         await update.message.reply_text("❌ Nieprawidłowy kod. Sprawdź jeszcze raz.")
+
 
 async def menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -933,6 +939,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"📝 Czy chcesz dodać notatkę do tego linku?\n\n🔗 {link}",
             reply_markup=keyboard
         )
+        return
+
+    if context.user_data.get("czekam_na_imie"):
+        fullname = update.message.text.strip()
+        save_name_and_surname(update.effective_user.id, fullname)
+        context.user_data.pop("czekam_na_imie")
+        await update.message.reply_text(f"✅ Zapisano jako: {fullname}")
+        await show_main_menu(update)
         return
 
     # 🔥 ДОДАНО: obsługa notatki do pliku
